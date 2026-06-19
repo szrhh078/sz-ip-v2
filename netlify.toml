@@ -1,0 +1,56 @@
+# Netlify deployment config for Shahriar TV
+# Covers: SPA routing, TLS/HSTS enforcement, CSP, and immutable asset caching.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# ── SPA fallback ─────────────────────────────────────────────────────────────
+[[redirects]]
+  from    = "/*"
+  to      = "/index.html"
+  status  = 200
+  # Don't redirect actual static files — only unknown paths (React routes)
+  force   = false
+  conditions = {}
+
+# ── Security headers (all responses) ─────────────────────────────────────────
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options        = "nosniff"
+    X-Frame-Options               = "DENY"
+    X-XSS-Protection              = "1; mode=block"
+    Referrer-Policy               = "strict-origin-when-cross-origin"
+    Permissions-Policy            = "camera=(), microphone=(), geolocation=()"
+
+    # HSTS — instructs browsers to only connect over HTTPS for the next
+    # 2 years (63072000 s), covering all subdomains. The `preload` directive
+    # opts the domain into browser HSTS preload lists so it's protected even
+    # on a user's very first visit (before any HTTP → HTTPS redirect fires).
+    # NOTE: only add `preload` once you're confident your domain and ALL its
+    # subdomains serve HTTPS — it's very hard to undo once submitted.
+    Strict-Transport-Security     = "max-age=63072000; includeSubDomains; preload"
+
+    # Content Security Policy:
+    # - `media-src *`  — IPTV streams arrive from CDNs we don't control
+    # - `img-src * data: blob:` — channel logos from arbitrary origins
+    # - `connect-src`  — Firebase, geojs.io (IP geo), GitHub raw (playlists)
+    # - `upgrade-insecure-requests` — forces any http:// sub-resource to HTTPS
+    # - `'unsafe-inline'` on scripts/styles — required by Vite's injected
+    #   inline styles and the shadcn component library; remove if you can add
+    #   a nonce-based approach in the future
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; media-src *; img-src * data: blob:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://get.geojs.io wss://*.firebaseio.com https://raw.githubusercontent.com; frame-ancestors 'none'; upgrade-insecure-requests"
+
+# ── Immutable asset caching (Vite content-hashed filenames) ─────────────────
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# ── Service worker — must never be cached ────────────────────────────────────
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control       = "no-cache, no-store, must-revalidate"
+    Service-Worker-Allowed = "/"

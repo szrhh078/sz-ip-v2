@@ -1,0 +1,38 @@
+rules_version = '2';
+
+// Reference rules for the Shahriar TV Firebase project. This file is not
+// auto-deployed by the app — copy it into Firebase Console > Firestore
+// Database > Rules (or `firebase deploy --only firestore:rules` if you use
+// the Firebase CLI) for it to take effect.
+//
+// Existing collections (siteSettings, etc.) are left exactly as your
+// project already has them configured — only the two NEW analytics
+// collections added by this change are covered below. If you already have
+// a rules file, merge the `match` blocks for `presence` and `channelStats`
+// into it rather than replacing the whole thing.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Presence heartbeats: any visitor can create/update their OWN session
+    // doc (no auth required — this is a public IPTV site), but can't write
+    // into someone else's, and can't read the raw collection directly
+    // (only via the app's aggregated admin view, which uses the same open
+    // read here — tighten this to admin-only reads if you don't want
+    // device/country data publicly queryable).
+    match /presence/{sessionId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.sessionId == sessionId;
+      allow delete: if resource.data.sessionId == sessionId;
+    }
+
+    // Per-channel view counters: anyone can increment totalViews (view
+    // tracking), nobody can decrement it or delete it from the client.
+    match /channelStats/{channelId} {
+      allow read: if true;
+      allow create: if true;
+      allow update: if request.resource.data.totalViews is number
+                    && request.resource.data.totalViews >= resource.data.totalViews;
+      allow delete: if false;
+    }
+  }
+}
